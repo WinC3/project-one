@@ -323,6 +323,6 @@ def shuffle_file(load_path='parsed data/unseparated_dataset.npz', seed=42):
 
 
 if __name__ == "__main__":
-    #shuffle_file(load_path='parsed data/cleaned_unseparated_dataset.npz', seed=0)
-    save_parsed_data()
+    shuffle_file(load_path='parsed data/cleaned_unseparated_dataset.npz', seed=0)
+    #save_parsed_data()
     #load_dataset_from_file()
