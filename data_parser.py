@@ -9,7 +9,7 @@ import os
 
 csv_metadata_path = "MAESTRO Data\maestro-v1.0.0\maestro-v1.0.0.csv"
 
-def load_dataset(n_samples=None, shuffle=False, delta_t=0.08):
+def load_dataset(n_samples=None, shuffle=False, delta_t=0.04):
     metadata_df = pd.read_csv(csv_metadata_path)
     metadata_array = metadata_df.values
 
@@ -59,10 +59,12 @@ def load_dataset(n_samples=None, shuffle=False, delta_t=0.08):
         print(f"Original: {CQT_data.shape}, After transition removal: {CQT_stable.shape}")
         print(f"Removed {len(CQT_data) - len(CQT_stable)} transition frames")
 
-        all_data.append(CQT_stable)
-        all_labels.append(labels_stable)
+        X, Y = create_context_windows(CQT_stable, labels_stable, context_size=4)
+        all_data.append(X)
+        all_labels.append(Y)
         
-        print(f"Added: {CQT_stable.shape} features, {labels_stable.shape} labels - File {i+1}")
+        #print(f"Added: {CQT_stable.shape} features, {labels_stable.shape} labels - File {i+1}")
+        print(f"Added: {X.shape} features, {Y.shape} labels - File {i+1}")
 
     return all_data, all_labels
 
@@ -71,6 +73,105 @@ def load_dataset(n_samples=None, shuffle=False, delta_t=0.08):
 
     # Split into train/validation/test
     #return split_data(all_data, all_labels, train_ratio, val_ratio)
+
+def create_context_windows(features, labels, context_size=8):
+    """
+    Convert frame-level features into overlapping time windows.
+
+    features: (time, freq_bins)
+    labels:   (time, n_notes)
+    context_size: number of frames per window
+    """
+    X, Y = [], []
+    half = context_size // 2
+    T = features.shape[0]
+
+    for t in range(half, T - half):
+        label = labels[t]
+        skip_window = False
+        for t_prime in range(t - half, t + half + 1):
+            if (labels[t_prime] != label).any():
+                #print(f"Skipping window centered at frame {t} due to label change at frame {t_prime}")
+                skip_window = True
+                break   # skip windows with label changes
+        if skip_window:
+            continue
+        window = features[t - half : t + half + 1]   # shape: (context_size, freq_bins)
+        X.append(window.T)   # transpose → (freq_bins, context_size)
+        Y.append(labels[t])  # label = center frame
+
+    return np.stack(X), np.stack(Y)
+
+def normalize_data(data, method='standard', feature_axis=2, params=None):
+    """
+    Normalize data using different methods
+    
+    Parameters:
+    data: numpy array of shape (samples, channels, freq_bins, context_size)
+    method: 'standard' (z-score), 'minmax', 'per_channel', or 'spec_norm'
+    feature_axis: which axis contains the features to normalize (usually freq_bins)
+    params: pre-computed normalization parameters (if None, computes from data)
+    
+    Returns:
+    normalized_data, normalization_params (for inverse if needed)
+    """
+    if params is not None:
+        # Use pre-computed parameters
+        method = params['method']
+        print(f"Using pre-computed {method} normalization parameters")
+        
+        if method == 'standard':
+            normalized = (data - params['mean']) / params['std']
+        elif method == 'minmax':
+            normalized = (data - params['min']) / (params['max'] - params['min'] + 1e-8)
+        elif method == 'per_channel':
+            normalized = (data - params['mean']) / params['std']
+        elif method == 'spec_norm':
+            normalized = (data - params['min']) / (params['max'] - params['min'] + 1e-8)
+        else:
+            raise ValueError(f"Unknown normalization method in params: {method}")
+    
+    else:
+        # Compute new parameters from data
+        if method == 'standard':
+            # Z-score normalization: (x - mean) / std
+            mean = np.mean(data, axis=feature_axis, keepdims=True)
+            std = np.std(data, axis=feature_axis, keepdims=True)
+            std = np.maximum(std, 1e-8)  # Avoid division by zero
+            normalized = (data - mean) / std
+            params = {'method': 'standard', 'mean': mean, 'std': std}
+            
+        elif method == 'minmax':
+            # Scale to [0, 1] range
+            data_min = np.min(data, axis=feature_axis, keepdims=True)
+            data_max = np.max(data, axis=feature_axis, keepdims=True)
+            normalized = (data - data_min) / (data_max - data_min + 1e-8)
+            params = {'method': 'minmax', 'min': data_min, 'max': data_max}
+            
+        elif method == 'per_channel':
+            # Normalize each frequency bin independently
+            mean = np.mean(data, axis=(0, 3), keepdims=True)  # Mean over samples and time context
+            std = np.std(data, axis=(0, 3), keepdims=True)
+            std = np.maximum(std, 1e-8)
+            normalized = (data - mean) / std
+            params = {'method': 'per_channel', 'mean': mean, 'std': std}
+            
+        elif method == 'spec_norm':
+            # Spectral normalization: scale each spectrogram independently
+            # Useful for audio where absolute magnitude varies
+            data_min = np.min(data, axis=(2, 3), keepdims=True)  # Min over freq and time
+            data_max = np.max(data, axis=(2, 3), keepdims=True)  # Max over freq and time
+            normalized = (data - data_min) / (data_max - data_min + 1e-8)
+            params = {'method': 'spec_norm', 'min': data_min, 'max': data_max}
+        
+        else:
+            raise ValueError(f"Unknown normalization method: {method}")
+        
+        print(f"Computed {method} normalization: range [{normalized.min():.3f}, {normalized.max():.3f}]")
+    
+    np.savez('parsed data/normalization_params.npz', **params)
+
+    return normalized, params
 
 
 def split_data_by_track(all_data, all_labels, train_ratio=0.7, val_ratio=0.15):
@@ -267,21 +368,30 @@ def save_parsed_data(n_samples=None):
     X = np.concatenate(all_data, axis=0)    # Shape: (total_frames, 88)
     y = np.concatenate(all_labels, axis=0)  # Shape: (total_frames, 88)
 
+    X = X[:, np.newaxis, :, :]  # add channel dim → (total_frames, 1, 88, context_size)
+
     save_path = 'parsed data/'
 
     # save data
     #np.savez(save_path + 'data_by_entry.npz', **{f'entry{i}': arr for i, arr in enumerate(all_data)})
     #np.savez(save_path + 'label_by_entry.npz', **{f'entry{i}': arr for i, arr in enumerate(all_labels)})
 
-    np.savez(save_path + 'cleaned_unseparated_dataset.npz', features=X, labels=y)
+    np.savez(save_path + 'cnn_dataset.npz', features=X, labels=y)
 
-def load_dataset_from_file(load_path='parsed data/unseparated_dataset.npz', n_samples=None, shuffle=False):
+def load_dataset_from_file(load_path='parsed data/unseparated_dataset.npz', n_samples=None, shuffle=False, normalize=True, norm_method='standard'):
     # Load with memory-mapping - doesn't load data until accessed
     data = np.load(load_path, mmap_mode='r')
     X = data['features'][:n_samples]
     y = data['labels'][:n_samples]
     print(f"Loaded data samples: {X.shape}")
     print(f"Loaded labels samples: {y.shape}")
+
+    # NEW: Normalize if requested
+    if normalize:
+        print("\n=== Normalizing Loaded Data ===")
+        X_normalized, norm_params = normalize_data(X, method=norm_method)
+        X = X_normalized
+        print(f"After normalization: {X.shape}")
 
     # Split into train/validation/test
     return split_data([X], [y], train_ratio=0.7, val_ratio=0.15, shuffle=shuffle)
@@ -323,6 +433,6 @@ def shuffle_file(load_path='parsed data/unseparated_dataset.npz', seed=42):
 
 
 if __name__ == "__main__":
-    shuffle_file(load_path='parsed data/cleaned_unseparated_dataset.npz', seed=0)
+    #shuffle_file(load_path='parsed data/cnn_dataset.npz', seed=0)
     #save_parsed_data()
-    #load_dataset_from_file()
+    load_dataset_from_file('parsed data\cnn_dataset.npz')
