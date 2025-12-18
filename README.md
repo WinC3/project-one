@@ -15,14 +15,14 @@ A PyTorch implementation of the "Onsets and Frames" model for automatic piano tr
 ### From GitHub (Recommended)
 
 ```bash
-pip install git+https://github.com/winc3/project-one.git
+pip install git+https://github.com/winc3/piano-transcriber.git
 ```
 
 ### For Development
 
 ```bash
-git clone https://github.com/winc3/project-one.git
-cd project-one
+git clone https://github.com/winc3/piano-transcriber.git
+cd piano-transcriber
 pip install -e .
 ```
 
@@ -111,7 +111,7 @@ Please feel free to submit issues, feature requests, or pull requests.
 
 **Code**: MIT License - see LICENSE file for details. The source code can be used for any purpose, including commercial applications.
 
-**Pre-trained Models**: Models trained on the MAESTRO dataset are restricted to **non-commercial use only** due to dataset licensing terms. For commercial applications, you must train your own models using commercially-licensed data.
+**Pre-trained Models**: Models trained on the MAESTRO dataset are restricted to **non-commercial use only** due to dataset licensing terms ([CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)). For commercial applications, you must train your own models using commercially-licensed data.
 
 ## Citation
 
@@ -122,5 +122,5 @@ This implementation is based on the "Onsets and Frames" model for automatic musi
 ## Acknowledgments
 
 - Built with PyTorch and torchaudio
-- Uses the MAESTRO dataset for training
+- Uses the [MAESTRO dataset](https://magenta.tensorflow.org/datasets/maestro) for training
 - Inspired by Google's Onsets and Frames implementation
