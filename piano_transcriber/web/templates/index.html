@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piano Transcription - Convert Audio to MIDI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(180deg, #ffffff 0%, #cbcbcb 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        
+        .header {
+            background: #222222;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .upload-section {
+            padding: 2rem;
+        }
+        
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            border-radius: 10px;
+            padding: 3rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f7fafc;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e6fffa;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            color: #a0aec0;
+            margin-bottom: 1rem;
+        }
+        
+        .upload-text {
+            font-size: 1.2rem;
+            color: #4a5568;
+            margin-bottom: 1rem;
+        }
+        
+        .upload-hint {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .btn {
+            background: #000000;
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 1rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .progress-section {
+            padding: 2rem;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .status-text {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #4a5568;
+        }
+        
+        .result-section {
+            padding: 2rem;
+            display: none;
+        }
+        
+        .result-item {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #000000;
+        }
+        
+        .result-label {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+        
+        .result-value {
+            color: #4a5568;
+        }
+        
+        .download-btn {
+            background: #48bb78;
+            margin-right: 1rem;
+        }
+        
+        .download-btn:hover {
+            background: #38a169;
+        }
+        
+        .error-section {
+            padding: 2rem;
+            display: none;
+        }
+        
+        .error-message {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .piano-notes {
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .note {
+            background: #edf2f7;
+            border-radius: 4px;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>Piano MIDI Transcriber</h1>
+                <p>Convert your piano audio to MIDI!</p>
+            </div>
+            
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-text">Drag and drop or click to browse audio</div>
+                    <div class="upload-hint">Supports MP3, WAV, M4A, FLAC, and OGG</div>
+                    <input type="file" id="fileInput" class="file-input" accept="audio/*">
+                </div>
+                <div style="text-align: center;">
+                    <button class="btn" id="transcribeBtn" disabled>Start Transcription</button>
+                </div>
+            </div>
+            
+            <div class="progress-section" id="progressSection">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status-text" id="statusText">Processing audio... please wait...</div>
+            </div>
+            
+            <div class="result-section" id="resultSection">
+                <div class="result-item">
+                    <div class="result-label">Filename</div>
+                    <div class="result-value" id="resultFilename"></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Duration</div>
+                    <div class="result-value" id="resultDuration"></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Notes Detected</div>
+                    <div class="result-value" id="resultNotesCount"></div>
+                </div>
+                <div class="result-item" id="notesContainer" style="display: none;">
+                    <div class="result-label">Notes and Timings</div>
+                    <div class="piano-notes" id="pianoNotes"></div>
+                </div>
+                <div style="text-align: center;">
+                    <button class="btn download-btn" id="downloadBtn">Download MIDI</button>
+                    <button class="btn" onclick="location.reload()">New Transcription</button>
+                </div>
+            </div>
+            
+            <div class="error-section" id="errorSection">
+                <div class="error-message" id="errorMessage"></div>
+                <div style="text-align: center; margin-top: 1rem;">
+                    <button class="btn" onclick="location.reload()">Try Again</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let currentJobId = null;
+        
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const transcribeBtn = document.getElementById('transcribeBtn');
+        const uploadSection = document.getElementById('uploadSection');
+        const progressSection = document.getElementById('progressSection');
+        const resultSection = document.getElementById('resultSection');
+        const errorSection = document.getElementById('errorSection');
+        
+        // File upload handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+        transcribeBtn.addEventListener('click', startTranscription);
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+        
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                selectFile(files[0]);
+            }
+        }
+        
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) {
+                selectFile(e.target.files[0]);
+            }
+        }
+        
+        function selectFile(file) {
+            if (!file.type.startsWith('audio/')) {
+                alert('Please select an audio file.');
+                return;
+            }
+            
+            selectedFile = file;
+            uploadArea.querySelector('.upload-text').textContent = `Selected: ${file.name}`;
+            transcribeBtn.disabled = false;
+        }
+        
+        async function startTranscription() {
+            if (!selectedFile) return;
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            // Show progress section
+            uploadSection.style.display = 'none';
+            progressSection.style.display = 'block';
+            
+            try {
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                currentJobId = result.job_id;
+                
+                // Start polling for status
+                pollTranscriptionStatus();
+                
+            } catch (error) {
+                showError(`Upload failed: ${error.message}`);
+            }
+        }
+        
+        async function pollTranscriptionStatus() {
+            if (!currentJobId) return;
+            
+            try {
+                const response = await fetch(`/status/${currentJobId}`);
+                const status = await response.json();
+                
+                if (status.status === 'processing') {
+                    // Continue polling
+                    setTimeout(pollTranscriptionStatus, 2000);
+                } else if (status.status === 'completed') {
+                    showResults(status);
+                } else if (status.status === 'error') {
+                    showError(status.error);
+                }
+                
+            } catch (error) {
+                showError(`Status check failed: ${error.message}`);
+            }
+        }
+        
+        function showResults(status) {
+            progressSection.style.display = 'none';
+            resultSection.style.display = 'block';
+            
+            document.getElementById('resultFilename').textContent = status.filename;
+            document.getElementById('resultDuration').textContent = `${status.result.duration.toFixed(1)} seconds`;
+            document.getElementById('resultNotesCount').textContent = status.result.notes.length;
+            
+            // Show notes if available
+            if (status.result.notes.length > 0) {
+                document.getElementById('notesContainer').style.display = 'block';
+                const notesContainer = document.getElementById('pianoNotes');
+                
+                // Convert MIDI pitch to note name
+                function midiToNoteName(pitch) {
+                    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                    const octave = Math.floor(pitch / 12) - 1;
+                    const noteIndex = pitch % 12;
+                    return noteNames[noteIndex] + octave;
+                }
+                
+                notesContainer.innerHTML = status.result.notes.slice(0, 20).map(note => 
+                    `<div class="note">♪ ${midiToNoteName(note.pitch)} at ${note.start_time.toFixed(2)}s - ${note.end_time.toFixed(2)}s (vel: ${(note.velocity * 127).toFixed(0)})</div>`
+                ).join('');
+                
+                if (status.result.notes.length > 20) {
+                    notesContainer.innerHTML += `<div class="note">... and ${status.result.notes.length - 20} more notes</div>`;
+                }
+            }
+            
+            // Setup download button
+            document.getElementById('downloadBtn').onclick = () => {
+                window.open(`/download/${currentJobId}/midi`, '_blank');
+            };
+        }
+        
+        function showError(message) {
+            progressSection.style.display = 'none';
+            errorSection.style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+    </script>
+</body>
+</html>
